@@ -3,23 +3,17 @@ def execute_r_type(funct3, funct7, rs1, rs2, rd):
     val1 = regts[int(rs1[1:])]  # Extract integer index
     val2 = regts[int(rs2[1:])]
     
-    if funct3 == "000" and funct7 == "0000000":  # ADD
-        regts[int(rd[1:])] = val1 + val2
-    elif funct3 == "000" and funct7 == "0100000":  # SUB
+    if funct3 == "000" and funct7 == "0100000":  # SUB okie2
         regts[int(rd[1:])] = val1 - val2
-    elif funct3 == "111":  # AND
-        regts[int(rd[1:])] = val1 & val2
-    elif funct3 == "110":  # OR
+    elif funct3 == "010":  # SLT (Set Less Than)
+        # If val1 is less than val2 when treated as signed numbers, set rd to 1, else 0
+        regts[int(rd[1:])] = 1 if val1 < val2 else 0
+    elif funct3 == "110":  # OR                         
         regts[int(rd[1:])] = val1 | val2
-    elif funct3 == "100":  # XOR
-        regts[int(rd[1:])] = val1 ^ val2
-    elif funct3 == "001":  # SLL (Shift Left Logical)
-        regts[int(rd[1:])] = val1 << (val2 & 0x1F)
-    elif funct3 == "101" and funct7 == "0000000":  # SRL (Shift Right Logical)
-        regts[int(rd[1:])] = val1 >> (val2 & 0x1F)
-    elif funct3 == "101" and funct7 == "0100000":  # SRA (Shift Right Arithmetic)
-        regts[int(rd[1:])] = val1 >> (val2 & 0x1F) if val1 >= 0 else (val1 >> (val2 & 0x1F)) | (-(1 << (32 - (val2 & 0x1F))))
-    
+    elif funct3 == "111":  # AND                        
+        regts[int(rd[1:])] = val1 & val2    
+    elif funct3 == "000" and funct7 == "0000000":  # ADD 
+        regts[int(rd[1:])] = val1 + val2
     print(f"Executed R-type: {rd} = {regts[int(rd[1:])]}")
 
 
