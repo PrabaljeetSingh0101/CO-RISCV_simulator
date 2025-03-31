@@ -2,6 +2,27 @@ def execute_r_type(funct3, funct7, rs1, rs2, rd):
     global regts  # Access the register list
     val1 = regts[int(rs1[1:])]  # Extract integer index
     val2 = regts[int(rs2[1:])]
+
+    if funct3 == "000" and funct7 == "0000000":  # ADD 
+        regts[int(rd[1:])] = val1 + val2
+    elif funct3 == "000" and funct7 == "0100000":  # SUB okie2
+        regts[int(rd[1:])] = val1 - val2
+    elif funct3 == "010":  # SLT (Set Less Than)
+        # If val1 is less than val2 when treated as signed numbers, set rd to 1, else 0
+        regts[int(rd[1:])] = 1 if val1 < val2 else 0
+    elif funct3 == "101" and funct7 == "0000000":  # SRL Shift Right Logical
+        regts[int(rd[1:])] = val1 >> (val2 & 0x1F)
+    elif funct3 == "110" and funct7 == "0000000":  # OR                         
+        regts[int(rd[1:])] = val1 | val2
+    elif funct3 == "111" and funct7 == "0000000":  # AND                        
+        regts[int(rd[1:])] = val1 & val2        
+   
+    print(f"Executed R-type: {rd} = {regts[int(rd[1:])]}")
+
+def execute_i_type(funct3, funct7, rs1, rs2, rd):
+    global regts  # Access the register list
+    val1 = regts[int(rs1[1:])]  # Extract integer index
+    val2 = regts[int(rs2[1:])]
     
     if funct3 == "000" and funct7 == "0100000":  # SUB okie2
         regts[int(rd[1:])] = val1 - val2
@@ -15,7 +36,6 @@ def execute_r_type(funct3, funct7, rs1, rs2, rd):
     elif funct3 == "000" and funct7 == "0000000":  # ADD 
         regts[int(rd[1:])] = val1 + val2
     print(f"Executed R-type: {rd} = {regts[int(rd[1:])]}")
-
 
 # Initialize 32 registers (all set to 0)
 regts = [0] * 32  
