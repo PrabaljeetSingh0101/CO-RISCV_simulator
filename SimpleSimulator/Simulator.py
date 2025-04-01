@@ -19,7 +19,7 @@ def execute_r_type(funct3, funct7, rs1, rs2, rd):
     pc+=4;                                      # cookie
     print(f"Executed R-type: {rd} = {regts[int(rd[1:])]}")
 
-def execute_i_type(funct3, imm, rs1, rd):
+def execute_i_type(funct3, imm, rs1, rd, opcode):
     global regts, memory, pc  # Access the registers, memory, and program counter
     val1 = regts[int(rs1[1:])]  # Extract value from source register
     
@@ -50,21 +50,21 @@ def execute_i_type(funct3, imm, rs1, rd):
     return False  # PC was not modified
 
 def execute_s_type(funct3, imm, rs1, rs2):
-    global regts, memory  # Access the registers and memory
+    global regts, memory, pc  # Access the registers and memory
     val1 = regts[int(rs1[1:])]  # Base address
     val2 = regts[int(rs2[1:])]  # Data to store
     
     # Sign extend the immediate value
     if imm & 0x800:  # Check if the MSB is 1 (negative number)
-        imm = imm | (~0xFFF)  # Sign extend by setting all upper bits to 1
+        imm |= 0xFFFFF000  # Extend negative values properly    
     
     if funct3 == "010":  # SW
         # Calculate memory address
         mem_addr = val1 + imm
         # Store word in memory
         memory[mem_addr] = val2
-    pc+=4;
-    print(f"Executed SW: MEM[{mem_addr}] = {val2}")
+        print(f"Executed SW: MEM[{mem_addr}] = {val2}")
+    pc+=4
 
 def execute_b_type(funct3, imm, rs1, rs2):
     global regts, pc  # Access the registers and program counter
@@ -137,7 +137,7 @@ with open("/home/strangersagain/Downloads/Group_148/automatedTesting/tests/bin/s
             execute_r_type(funct3, funct7, rs1, rs2, rd)
             print("- - - - -- - - - -- ")
 
-        elif opcode == "0000011": # I
+        elif opcode == "0000011" or opcode == "0010011 " or opcode == "1100111" : # I
             imm = int(line[:12], 2) 
             rs1 = "r" + str(int(line[12:17], 2))  
             funct3 = line[17:20] 
@@ -147,7 +147,7 @@ with open("/home/strangersagain/Downloads/Group_148/automatedTesting/tests/bin/s
             print(f"funct3: {funct3}")
             print(f"rd: {rd}")
             print(f"opcode: {opcode}")
-            execute_i_type(funct3, imm, rs1, rd)
+            execute_i_type(funct3, imm, rs1, rd. opcode)
             print("- - - - -- - - - -- ")
 
         elif opcode == "0100011": # Store
