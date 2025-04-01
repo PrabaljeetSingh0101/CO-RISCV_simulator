@@ -1,3 +1,9 @@
+def sign_extend(value, bits):
+    """Sign extends a value to the specified number of bits."""
+    if (value & (1 << (bits - 1))) != 0:
+        value = value | (~((1 << bits) - 1))
+    return value
+
 def execute_r_type(funct3, funct7, rs1, rs2, rd):
     global regts,pc  # Access the register list
     val1 = regts[int(rs1[1:])]  # Extract integer index
@@ -20,51 +26,47 @@ def execute_r_type(funct3, funct7, rs1, rs2, rd):
     print(f"Executed R-type: {rd} = {regts[int(rd[1:])]}")
 
 def execute_i_type(funct3, imm, rs1, rd, opcode):
-    global regts, memory, pc  # Access the registers, memory, and program counter
-    val1 = regts[int(rs1[1:])]  # Extract value from source register
-    
-    # Sign extend the immediate value (12 bits)
-    if imm & 0x800:  # Check if the MSB is 1 (negative number)
-        imm = imm | (~0xFFF)  # Sign extend by setting all upper bits to 1
-    
+    global regts, memory, pc
+    val1 = regts[int(rs1[1:])]
+    rd_idx = int(rd[1:])
+    imm = sign_extend(imm, 12)  # Proper 12-bit sign extension
     if funct3 == "010" and opcode == "0000011":  # LW
-        # Calculate memory address
         mem_addr = val1 + imm
-        # Load word from memory
-        regts[int(rd[1:])] = memory.get(mem_addr, 0)  # Load from memory, default 0 if not found
-        print(f"Executed LW: {rd} = MEM[{mem_addr}] = {regts[int(rd[1:])]}")
-
+        if 0x00010000 <= mem_addr <= 0x0001007F:  # Data memory range
+            regts[rd_idx] = memory.get(mem_addr, 0)
+            print(f"Executed LW: {rd} = MEM[{mem_addr}] = {regts[rd_idx]}")
+        else:
+            print(f"Error: Memory address {hex(mem_addr)} out of valid data memory range for LW")
+            # Optionally handle this error differently (e.g., raise an exception)
+        pc += 4
+        return False
     elif funct3 == "000" and opcode == "0010011":  # ADDI
-        regts[int(rd[1:])] = val1 + imm
-        print(f"Executed ADDI: {rd} = {val1} + {imm} = {regts[int(rd[1:])]}")
-    
+        regts[rd_idx] = val1 + imm
+        print(f"Executed ADDI: {rd} = {val1} + {imm} = {regts[rd_idx]}")
+        pc += 4
+        return False
     elif funct3 == "000" and opcode == "1100111":  # JALR
-        # Save return address
-        regts[int(rd[1:])] = pc + 4
-        # Jump to target address (making sure the LSB is 0)
-        pc = (val1 + imm) & ~1
+        regts[rd_idx] = pc + 4
+        pc = (val1 + imm) & ~1  # Ensure LSB is 0
         print(f"Executed JALR: {rd} = {pc + 4}, PC = {pc}")
-        return True  # Indicate PC was modified
+        return True  # Jump taken
+    else:
+        pc += 4 # For other I-type instructions (if any)
+        return False
     
-    pc+=4                       # cookie
-    return False  # PC was not modified
-
+# S-type execution
 def execute_s_type(funct3, imm, rs1, rs2):
-    global regts, memory, pc  # Access the registers and memory
-    val1 = regts[int(rs1[1:])]  # Base address
-    val2 = regts[int(rs2[1:])]  # Data to store
-    
-    # Sign extend the immediate value
-    if imm & 0x800:  # Check if the MSB is 1 (negative number)
-        imm |= 0xFFFFF000  # Extend negative values properly    
-    
+    global regts, memory, pc
+    val1 = regts[int(rs1[1:])]
+    val2 = regts[int(rs2[1:])]
+    imm = sign_extend(imm, 12)
+
     if funct3 == "010":  # SW
-        # Calculate memory address
         mem_addr = val1 + imm
-        # Store word in memory
-        memory[mem_addr] = val2
-        print(f"Executed SW: MEM[{mem_addr}] = {val2}")
-    pc+=4
+        if 0x00010000 <= mem_addr <= 0x0001007F:  # Data memory range
+            memory[mem_addr] = val2
+    pc += 4
+    return False
 
 def execute_b_type(funct3, imm, rs1, rs2):
     global regts, pc  # Access the registers and program counter
