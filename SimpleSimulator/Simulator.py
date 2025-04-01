@@ -102,7 +102,7 @@ def execute_j_type(imm, rd):
     regts[int(rd[1:])] = pc + 4
     
     # Jump to target address
-    pc+=imm
+    pc += (imm << 1) 
     
     print(f"Executed JAL: {rd} = {pc + 4}, PC = {pc}")
     return True  # PC was modified
@@ -114,7 +114,7 @@ memory = {}  # Dictionary to simulate memory storage
 pc = 0  # Program Counter (PC)
 
 # Read machine code instructions from file
-with open("/home/strangersagain/Downloads/Group_148/automatedTesting/tests/bin/simple/simple_6.txt", 'r') as f:
+with open("/home/strangersagain/Downloads/Group_148/automatedTesting/tests/bin/simple/simple_1.txt", 'r') as f:
     # file_content = f.read()
     # print(file_content)
     for line in f:
@@ -137,7 +137,7 @@ with open("/home/strangersagain/Downloads/Group_148/automatedTesting/tests/bin/s
             execute_r_type(funct3, funct7, rs1, rs2, rd)
             print("- - - - -- - - - -- ")
 
-        elif opcode == "0000011" or opcode == "0010011 " or opcode == "1100111" : # I
+        elif opcode == "0000011" or opcode == "0010011" or opcode == "1100111" : # I
             imm = int(line[:12], 2) 
             rs1 = "r" + str(int(line[12:17], 2))  
             funct3 = line[17:20] 
@@ -147,7 +147,7 @@ with open("/home/strangersagain/Downloads/Group_148/automatedTesting/tests/bin/s
             print(f"funct3: {funct3}")
             print(f"rd: {rd}")
             print(f"opcode: {opcode}")
-            execute_i_type(funct3, imm, rs1, rd. opcode)
+            execute_i_type(funct3, imm, rs1, rd, opcode)
             print("- - - - -- - - - -- ")
 
         elif opcode == "0100011": # Store
@@ -174,14 +174,37 @@ with open("/home/strangersagain/Downloads/Group_148/automatedTesting/tests/bin/s
             funct3 = line[17:20]
             imm_4_1 = line[20:24]  # Bits 20-23
             imm_11 = line[24]  # Bit 24
-            execute_b_type(funct3, imm, rs1, rs2)
-            # Merge the immediate in the correct order
-            imm = int(imm_12 + imm_11 + imm_10_5 + imm_4_1 + "0", 2)  # Shift left by 1 (as per RISC-V spec)        
+            # Merge the immediate correctly
+            imm = int(imm_12 + imm_11 + imm_10_5 + imm_4_1 + "0", 2)  # Shift left by 1
+    
+            # Apply sign extension if negative
+            if imm & (1 << 12):  # If 13th bit (MSB) is set
+                imm -= (1 << 13)  # Convert to signed value
             print(f"imm: {imm}")
             print(f"rs2: {rs2}")
             print(f"rs1: {rs1}")
             print(f"funct3: {funct3}")
             print(f"opcode: {opcode}")
-            execute_j_type(imm, rd)
+            execute_b_type(funct3, imm, rs1, rs2)
             print("- - - - -- - - - -- ")
 
+        elif opcode == "1101111":  # J-Type (JAL)
+            imm_20 = line[0]  # Most significant bit (MSB)
+            imm_10_1 = line[1:11]  # Bits 1-10
+            imm_11 = line[11]  # Bit 11
+            imm_19_12 = line[12:20]  # Bits 12-19
+            rd = "r" + str(int(line[20:25], 2))  # Destination register
+
+            # Merge the immediate in the correct order (J-Type format)
+            imm = int(imm_20 + imm_19_12 + imm_11 + imm_10_1 + "0", 2)  # Shift left by 1
+
+            # Apply sign extension if negative
+            if imm & (1 << 20):  # If 21st bit (MSB) is set
+                imm -= (1 << 21)  # Convert to signed value
+
+            print(f"imm: {imm}")
+            print(f"rd: {rd}")
+            print(f"opcode: {opcode}")
+
+            execute_j_type(imm, rd)  
+            print("- - - - -- - - - -- ")
