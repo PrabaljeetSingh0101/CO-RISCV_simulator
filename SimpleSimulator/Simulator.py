@@ -16,7 +16,7 @@ def execute_r_type(funct3, funct7, rs1, rs2, rd):
         regts[int(rd[1:])] = val1 | val2
     elif funct3 == "111" and funct7 == "0000000":  # AND                        
         regts[int(rd[1:])] = val1 & val2        
-    pc+=4;
+    pc+=4;                                      # cookie
     print(f"Executed R-type: {rd} = {regts[int(rd[1:])]}")
 
 def execute_i_type(funct3, imm, rs1, rd):
@@ -31,12 +31,9 @@ def execute_i_type(funct3, imm, rs1, rd):
         # Calculate memory address
         mem_addr = val1 + imm
         # Load word from memory
-        if mem_addr in memory:
-            regts[int(rd[1:])] = memory[mem_addr]
-        else:
-            regts[int(rd[1:])] = 0  # If memory location not initialized
+        regts[int(rd[1:])] = memory.get(mem_addr, 0)  # Load from memory, default 0 if not found
         print(f"Executed LW: {rd} = MEM[{mem_addr}] = {regts[int(rd[1:])]}")
-    
+
     elif funct3 == "000" and opcode == "0010011":  # ADDI
         regts[int(rd[1:])] = val1 + imm
         print(f"Executed ADDI: {rd} = {val1} + {imm} = {regts[int(rd[1:])]}")
@@ -48,7 +45,8 @@ def execute_i_type(funct3, imm, rs1, rd):
         pc = (val1 + imm) & ~1
         print(f"Executed JALR: {rd} = {pc + 4}, PC = {pc}")
         return True  # Indicate PC was modified
-    pc+=4;
+    
+    pc+=4                       # cookie
     return False  # PC was not modified
 
 def execute_s_type(funct3, imm, rs1, rs2):
