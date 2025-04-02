@@ -12,7 +12,7 @@ def print_data_memory():
         for addr in range(DATA_MEMORY_START, DATA_MEMORY_END + 1, 4):
             value = data_memory.get(addr, 0)
             f.write(f"0x{addr:08x}:0b{value:032b}\n")
-
+            
 def load_program_memory(file_path):
     global program_memory, pc
     pc = PROGRAM_MEMORY_START
@@ -25,19 +25,11 @@ def load_program_memory(file_path):
                 line = line.strip()
                 line_count += 1
                 print(f"Line {line_count}: {line}")
-                
-                # Check if line is a 32-bit binary number (without 0b prefix)
-                if len(line) == 32 and all(bit in '01' for bit in line):
-                    program_memory[address] = int(line, 2)
-                    print(f"Loaded instruction at {hex(address)}: {line}")
-                    address += 4
-                # Original handling for 0b prefix
-                elif line.startswith("0b") and len(line) == 34:  # 0b + 32 bits
+                if line.startswith("0b") and len(line) == 34:  # 0b + 32 bits
                     program_memory[address] = int(line[2:], 2)
                     print(f"Loaded instruction at {hex(address)}: {line}")
                     address += 4
-                # Memory address format
-                elif line.startswith("0x"):
+                elif line.startswith("0x"):  # Memory address format
                     parts = line.split(":")
                     if len(parts) == 2:
                         addr = int(parts[0], 16)
@@ -45,18 +37,12 @@ def load_program_memory(file_path):
                             value = int(parts[1][2:], 2)
                             data_memory[addr] = value
                             print(f"Loaded data at {hex(addr)}: {parts[1]}")
-                        else:
-                            # Handle case where value doesn't have 0b prefix
-                            value = int(parts[1], 2)
-                            data_memory[addr] = value
-                            print(f"Loaded data at {hex(addr)}: {parts[1]}")
-                
                 if address > PROGRAM_MEMORY_END:
                     raise ValueError("Program memory overflow!")
         print(f"Program loaded: {len(program_memory)} instructions")
     except Exception as e:
         print(f"Error loading program: {e}")
-        
+
 def sign_extend(value, bits):
     sign_bit = 1 << (bits - 1)
     return (value & (sign_bit - 1)) - (value & sign_bit)
@@ -208,7 +194,7 @@ def simulate(input_file_path, output_file_path):
 
     # Initialize 32 registers (all set to 0)
     regts = [0] * 32  
-    pc = 0  # Program Counter (PC)c
+    pc = 0  # Program Counter (PC)
    # Clear output file
     with open(output_file_path, 'w') as f:
         f.write("")  # Clear the file content
@@ -266,8 +252,7 @@ def simulate(input_file_path, output_file_path):
             imm = int(upper_imm + lower_imm, 2)  # Full 12-bit immediate
             execute_s_type(funct3, imm, rs1, rs2)
         
-                # In the main execution loop, instead of checking for a specific bit pattern:
-        elif opcode == "1100011":  # Branch type
+        elif opcode == "1100011": # Branch type
             imm_12 = instruction_bin[0]  # Most significant bit (MSB)
             imm_10_5 = instruction_bin[1:7]  # Bits 1-6
             rs2 = "r" + str(int(instruction_bin[7:12], 2))
@@ -275,24 +260,17 @@ def simulate(input_file_path, output_file_path):
             funct3 = instruction_bin[17:20]
             imm_4_1 = instruction_bin[20:24]  # Bits 20-23
             imm_11 = instruction_bin[24]  # Bit 24
-            
             # Merge the immediate correctly
             imm = int(imm_12 + imm_11 + imm_10_5 + imm_4_1 + "0", 2)  # Shift left by 1
-
+    
             # Apply sign extension if negative
             if imm & (1 << 12):  # If 13th bit (MSB) is set
                 imm -= (1 << 13)  # Convert to signed value
-            
-            # Check for virtual halt (beq r0, r0, 0)
-            if funct3 == "000" and rs1 == "r0" and rs2 == "r0" and imm == 0:
-                print("Virtual Halt encountered - stopping execution")
-                print_register_state()
-                print_data_memory()
+                
+            result = execute_b_type(funct3, imm, rs1, rs2)
+            if result and rs1 == "r0" and rs2 == "r0" and imm == 0:
                 halt_encountered = True
                 break
-            
-            # Otherwise, execute the branch normally
-            result = execute_b_type(funct3, imm, rs1, rs2)
 
         elif opcode == "1101111":  # J-Type (JAL)
             imm_20 = instruction_bin[0]  # Most significant bit (MSB)
