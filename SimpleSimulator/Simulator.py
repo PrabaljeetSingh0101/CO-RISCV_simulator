@@ -1,8 +1,19 @@
+def load_program_memory(file_path):
+    global program_memory, pc
+    pc = PROGRAM_MEMORY_START  # Start at 0x00000000
+    with open(file_path, 'r') as f:
+        address = PROGRAM_MEMORY_START
+        for line in f:
+            line = line.strip()
+            if len(line) == 32:  # Ensure it's a 32-bit instruction
+                program_memory[address] = int(line, 2)  # Store as integer
+                address += 4  # Instructions are 4 bytes apart
+            if address > PROGRAM_MEMORY_END:
+                raise ValueError("Program memory overflow!")
+            
 def sign_extend(value, bits):
-    """Sign extends a value to the specified number of bits."""
-    if (value & (1 << (bits - 1))) != 0:
-        value = value | (~((1 << bits) - 1))
-    return value
+    sign_bit = 1 << (bits - 1)
+    return (value & (sign_bit - 1)) - (value & sign_bit)
 
 def execute_r_type(funct3, funct7, rs1, rs2, rd):
     global regts,pc  # Access the register list
@@ -26,18 +37,19 @@ def execute_r_type(funct3, funct7, rs1, rs2, rd):
     print(f"Executed R-type: {rd} = {regts[int(rd[1:])]}")
 
 def execute_i_type(funct3, imm, rs1, rd, opcode):
-    global regts, memory, pc
+    global regts, data_memory, pc     
     val1 = regts[int(rs1[1:])]
     rd_idx = int(rd[1:])
     imm = sign_extend(imm, 12)  # Proper 12-bit sign extension
+
     if funct3 == "010" and opcode == "0000011":  # LW
         mem_addr = val1 + imm
-        if 0x00010000 <= mem_addr <= 0x0001007F:  # Data memory range
-            regts[rd_idx] = memory.get(mem_addr, 0)
-            print(f"Executed LW: {rd} = MEM[{mem_addr}] = {regts[rd_idx]}")
+        if DATA_MEMORY_START <= mem_addr <= DATA_MEMORY_END and mem_addr % 4 == 0:  # Word-aligned
+            regts[rd_idx] = data_memory.get(mem_addr, 0)  # Default to 0 if uninitialized
+            print(f"Executed LW: {rd} = MEM[{hex(mem_addr)}] = {regts[rd_idx]}")
         else:
-            print(f"Error: Memory address {hex(mem_addr)} out of valid data memory range for LW")
-            # Optionally handle this error differently (e.g., raise an exception)
+            print(f"Error: Invalid memory address {hex(mem_addr)} for LW (range: {hex(DATA_MEMORY_START)}-{hex(DATA_MEMORY_END)})")
+            return True  # Indicate error (optional)
         pc += 4
         return False
     elif funct3 == "000" and opcode == "0010011":  # ADDI
@@ -50,9 +62,9 @@ def execute_i_type(funct3, imm, rs1, rd, opcode):
         pc = (val1 + imm) & ~1  # Ensure LSB is 0
         print(f"Executed JALR: {rd} = {pc + 4}, PC = {pc}")
         return True  # Jump taken
-    else:
-        pc += 4 # For other I-type instructions (if any)
-        return False
+    
+    pc += 4 # For other I-type instructions (if any)
+    return False
     
 # S-type execution
 def execute_s_type(funct3, imm, rs1, rs2):
@@ -63,9 +75,18 @@ def execute_s_type(funct3, imm, rs1, rs2):
 
     if funct3 == "010":  # SW
         mem_addr = val1 + imm
-        if 0x00010000 <= mem_addr <= 0x0001007F:  # Data memory range
-            memory[mem_addr] = val2
+        if PROGRAM_MEMORY_START <= mem_addr <= PROGRAM_MEMORY_END:
+            print(f"Error: Attempt to write to program memory {hex(mem_addr)}")
+        elif STACK_MEMORY_START <= mem_addr <= STACK_MEMORY_END and mem_addr % 4 == 0:
+            stack_memory[mem_addr] = val2 & 0xFFFFFFFF
+            print(f"Executed SW (Stack): MEM[{hex(mem_addr)}] = {val2} (from {rs2})")
+        elif DATA_MEMORY_START <= mem_addr <= DATA_MEMORY_END and mem_addr % 4 == 0:
+            data_memory[mem_addr] = val2 & 0xFFFFFFFF
+            print(f"Executed SW (Data): MEM[{hex(mem_addr)}] = {val2} (from {rs2})")
+        else:
+            print(f"Error: Invalid memory address {hex(mem_addr)} for SW")
     pc += 4
+    print(f"PC updated to: {pc}")
     return False
 
 def execute_b_type(funct3, imm, rs1, rs2):
@@ -73,9 +94,7 @@ def execute_b_type(funct3, imm, rs1, rs2):
     val1 = regts[int(rs1[1:])]
     val2 = regts[int(rs2[1:])]
     
-    # Sign extend the immediate value
-    if imm & 0x1000:  # Check if the MSB is 1 (negative number)
-        imm = imm | (~0x1FFF)  # Sign extend
+    imm = sign_extend(imm, 13)  # 13-bit immediate (shifted left by 1)
     
     if funct3 == "000":  # BEQ
         if val1 == val2:
@@ -90,25 +109,39 @@ def execute_b_type(funct3, imm, rs1, rs2):
             print(f"Executed BNE: Branch taken to PC = {pc}")
             return True  # PC was modified
         print(f"Executed BNE: Branch not taken")
-    pc+=4;
+    pc+=4
     return False  # PC was not modified
 
 def execute_j_type(imm, rd):
     global regts, pc  # Access the registers and program counter
     
-    # Sign extend the immediate value
-    if imm & 0x100000:  # Check if the MSB is 1 (negative number)
-        imm = imm | (~0x1FFFFF)  # Sign extend
-    
-    # Save return address
-    regts[int(rd[1:])] = pc + 4
-    
-    # Jump to target address
+    imm = sign_extend(imm, 21)  # 21-bit immediate (shifted left by 1)
+    rd_idx = int(rd[1:])
+
+    regts[rd_idx] = pc + 4
+    # Jump to target address    
     pc += (imm << 1) 
     
     print(f"Executed JAL: {rd} = {pc + 4}, PC = {pc}")
     return True  # PC was modified
 
+# Memory initialization
+PROGRAM_MEMORY_SIZE = 256  # 64 locations * 4 bytes = 256 bytes
+STACK_MEMORY_SIZE = 128    # 32 locations * 4 bytes = 128 bytes
+DATA_MEMORY_SIZE = 128     # 32 locations * 4 bytes = 128 bytes
+
+PROGRAM_MEMORY_START = 0x00000000
+STACK_MEMORY_START = 0x00000100
+DATA_MEMORY_START = 0x00010000
+
+PROGRAM_MEMORY_END = PROGRAM_MEMORY_START + PROGRAM_MEMORY_SIZE - 1  # 0x000000FF
+STACK_MEMORY_END = STACK_MEMORY_START + STACK_MEMORY_SIZE - 1        # 0x0000017F
+DATA_MEMORY_END = DATA_MEMORY_START + DATA_MEMORY_SIZE - 1          # 0x0001007F
+
+# Memory dictionaries (address -> 32-bit value)
+program_memory = {}  # For instructions
+stack_memory = {}    # For stack operations
+data_memory = {}     # For data storage (LW/SW)
 
 # Initialize 32 registers (all set to 0)
 regts = [0] * 32  
@@ -210,3 +243,4 @@ with open("/home/strangersagain/Downloads/Group_148/automatedTesting/tests/bin/s
 
             execute_j_type(imm, rd)  
             print("- - - - -- - - - -- ")
+            
