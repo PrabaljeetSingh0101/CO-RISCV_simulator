@@ -1,3 +1,14 @@
+def print_register_state():
+    global regts, pc
+    reg_values = [f"{reg:032b}" for reg in regts]
+    print(f"{hex(pc)} {' '.join(reg_values)}")
+
+def print_data_memory():
+    global data_memory
+    print("\nData Memory (after Virtual Halt):")
+    for addr in range(DATA_MEMORY_START, DATA_MEMORY_END + 1, 4):
+        value = data_memory.get(addr, 0)
+        print(f"{value:032b}")
 def load_program_memory(file_path):
     global program_memory, pc
     pc = PROGRAM_MEMORY_START  # Start at 0x00000000
@@ -68,16 +79,14 @@ def execute_i_type(funct3, imm, rs1, rd, opcode):
     
 # S-type execution
 def execute_s_type(funct3, imm, rs1, rs2):
-    global regts, memory, pc
+    global regts, stack_memory, data_memory, pc
     val1 = regts[int(rs1[1:])]
     val2 = regts[int(rs2[1:])]
     imm = sign_extend(imm, 12)
 
     if funct3 == "010":  # SW
         mem_addr = val1 + imm
-        if PROGRAM_MEMORY_START <= mem_addr <= PROGRAM_MEMORY_END:
-            print(f"Error: Attempt to write to program memory {hex(mem_addr)}")
-        elif STACK_MEMORY_START <= mem_addr <= STACK_MEMORY_END and mem_addr % 4 == 0:
+        if STACK_MEMORY_START <= mem_addr <= STACK_MEMORY_END and mem_addr % 4 == 0:
             stack_memory[mem_addr] = val2 & 0xFFFFFFFF
             print(f"Executed SW (Stack): MEM[{hex(mem_addr)}] = {val2} (from {rs2})")
         elif DATA_MEMORY_START <= mem_addr <= DATA_MEMORY_END and mem_addr % 4 == 0:
@@ -85,9 +94,8 @@ def execute_s_type(funct3, imm, rs1, rs2):
             print(f"Executed SW (Data): MEM[{hex(mem_addr)}] = {val2} (from {rs2})")
         else:
             print(f"Error: Invalid memory address {hex(mem_addr)} for SW")
-    pc += 4
-    print(f"PC updated to: {pc}")
-    return False
+        pc += 4
+        return False
 
 def execute_b_type(funct3, imm, rs1, rs2):
     global regts, pc  # Access the registers and program counter
@@ -145,8 +153,8 @@ data_memory = {}     # For data storage (LW/SW)
 
 # Initialize 32 registers (all set to 0)
 regts = [0] * 32  
-memory = {}  # Dictionary to simulate memory storage
 pc = 0  # Program Counter (PC)
+
 
 # Read machine code instructions from file
 with open("/home/strangersagain/Downloads/Group_148/automatedTesting/tests/bin/simple/simple_1.txt", 'r') as f:
@@ -156,7 +164,10 @@ with open("/home/strangersagain/Downloads/Group_148/automatedTesting/tests/bin/s
         line=line.strip()#Whitespace characters include spaces, tabs (\t), newline characters (\n), carriage returns (\r), and vertical tabs (\v).
         print(line)
         opcode = line[25:]
-
+        if line=="00000000000000000000000001100011":
+            print("Virtual halt encountered - stopping execution")
+            break
+        
         if opcode == "0110011":  # R 
             funct7 = line[:7]
             rs2 = "r" + str(int(line[7:12], 2))
