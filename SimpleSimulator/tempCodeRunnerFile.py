@@ -169,9 +169,10 @@ def execute_b_type(funct3, imm, rs1, rs2):
     
     # Virtual halt check - BEQ r0, r0, 0
     if funct3 == "000" and rs1 == "r0" and rs2 == "r0" and imm == 0:
-        # Add this line to print register state for halt instruction
-        print_register_state(pc, regts, output_file_path)
+        pc += 4  # Important: increment PC before halting
         print(f"Virtual Halt encountered - stopping execution")
+        print_register_state(pc, regts, output_file_path)
+        print_data_memory(data_memory, output_file_path)
         return True  # Return True to indicate halt
         
     if funct3 == "000":  # BEQ
@@ -192,7 +193,6 @@ def execute_b_type(funct3, imm, rs1, rs2):
     pc += 4
     print_register_state(pc, regts, output_file_path)
     return False
-
 def execute_j_type(imm, rd):
     global regts, pc
     imm = sign_extend(imm, 21)
@@ -214,6 +214,8 @@ DATA_MEMORY_START = 0x00010000
 PROGRAM_MEMORY_END = PROGRAM_MEMORY_START + PROGRAM_MEMORY_SIZE - 1  # 0x000000FF
 STACK_MEMORY_END = STACK_MEMORY_START + STACK_MEMORY_SIZE - 1        # 0x0000017F
 DATA_MEMORY_END = DATA_MEMORY_START + DATA_MEMORY_SIZE - 1          # 0x0001007F
+
+
 def simulate(input_file_path, output_file_path):
     global program_memory, pc, regts, data_memory, stack_memory
     
@@ -237,8 +239,8 @@ def simulate(input_file_path, output_file_path):
     # Load program
     load_program_memory(input_file_path)
     
-    # REMOVE THIS LINE - don't print initial register state
-    # print_register_state(pc, regts, output_file_path)
+    # Print initial register state including initialized stack pointer
+    print_register_state(pc, regts, output_file_path)
     
     # Execute instructions
     halt_encountered = False
@@ -307,11 +309,9 @@ def simulate(input_file_path, output_file_path):
             
             branch_taken = execute_b_type(funct3, imm, rs1, rs2)
             if branch_taken:
-                # Virtual halt check - BEQ r0, r0, 0
+                # The execute_b_type function already handles PC updates and virtual halt
                 if funct3 == "000" and rs1 == "r0" and rs2 == "r0" and imm == 0:
                     halt_encountered = True
-                    # Print the data memory only once, right here
-                    print_data_memory(data_memory, output_file_path)
                 continue  # Skip PC increment
                 
         elif opcode == "1101111":  # J-type (JAL)
@@ -336,8 +336,10 @@ def simulate(input_file_path, output_file_path):
     
     if not halt_encountered:
         print("Warning: Program ended without encountering Virtual Halt")
-        # Only print data memory here if halt wasn't encountered
-        print_data_memory(data_memory, output_file_path)
+    
+    # Print final data memory state
+    print_data_memory(data_memory, output_file_path)
+    
     
 # Memory initialization
 PROGRAM_MEMORY_SIZE = 256  # 64 locations * 4 bytes = 256 bytes
