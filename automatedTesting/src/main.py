@@ -19,7 +19,8 @@ def printHelp():
 	print("--linux for Linux operating system")
 	print("--windows for windows operating system")
 	print("Example_linux: $python3 src/main.py --linux --no-sim")
-	print("Example_windows: >python3 src\main.py --windows --no-sim")
+	print("Example_windows: >python3 src\\main.py --windows --no-sim")
+
 
 def setupArgs():
 	global VERBOSE
