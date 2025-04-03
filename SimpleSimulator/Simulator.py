@@ -1,14 +1,3 @@
-def print_stack_memory(stack_memory, output_file_path):
-    # Write memory contents to output file for stack memory range
-    with open(output_file_path, 'a') as f:
-        f.write("\n# Stack Memory\n")
-        for addr in range(STACK_MEMORY_START, STACK_MEMORY_START + STACK_MEMORY_SIZE, 4):
-            value = stack_memory.get(addr, 0)
-            if value >= 0:
-                value_bin = f"0b{value:032b}"
-            else:
-                value_bin = f"0b{(1 << 32) + value:032b}"
-            f.write(f"0x{addr:08X}:{value_bin}\n")
 def print_register_state(pc, regts, output_file_path):
     # Convert PC to binary with 0b prefix
     pc_bin = f"0b{pc:032b}" if pc >= 0 else f"0b{(1 << 32) + pc:032b}"
@@ -351,9 +340,7 @@ def simulate(input_file_path, output_file_path):
     # Print final data memory state
     print_data_memory(data_memory, output_file_path)
     
-    # Also print stack memory state for debugging
-    print_stack_memory(stack_memory, output_file_path)
-
+    
 # Memory initialization
 PROGRAM_MEMORY_SIZE = 256  # 64 locations * 4 bytes = 256 bytes
 STACK_MEMORY_SIZE = 128    # 32 locations * 4 bytes = 128 bytes
