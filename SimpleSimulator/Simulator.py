@@ -1,17 +1,42 @@
-def print_register_state():
-    global regts, pc
-    reg_values = [f"{reg:032b}" for reg in regts]
-    output_line = ' '.join(reg_values)
+def print_stack_memory(stack_memory, output_file_path):
+    # Write memory contents to output file for stack memory range
+    with open(output_file_path, 'a') as f:
+        f.write("\n# Stack Memory\n")
+        for addr in range(STACK_MEMORY_START, STACK_MEMORY_START + STACK_MEMORY_SIZE, 4):
+            value = stack_memory.get(addr, 0)
+            if value >= 0:
+                value_bin = f"0b{value:032b}"
+            else:
+                value_bin = f"0b{(1 << 32) + value:032b}"
+            f.write(f"0x{addr:08X}:{value_bin}\n")
+def print_register_state(pc, regts, output_file_path):
+    # Convert PC to binary with 0b prefix
+    pc_bin = f"0b{pc:032b}" if pc >= 0 else f"0b{(1 << 32) + pc:032b}"
+    
+    # Convert registers to binary with 0b prefix
+    reg_values = []
+    for reg in regts:
+        if reg >= 0:
+            reg_bin = f"0b{reg:032b}"
+        else:
+            reg_bin = f"0b{(1 << 32) + reg:032b}"
+        reg_values.append(reg_bin)
+    
     # Write to output file
     with open(output_file_path, 'a') as f:
-        f.write(output_line + '\n')
-def print_data_memory():
-    global data_memory
-    # Write memory contents to output file
+        f.write(f"{pc_bin} {' '.join(reg_values)}\n")
+
+def print_data_memory(data_memory, output_file_path):
+    # Write memory contents to output file for data memory range
     with open(output_file_path, 'a') as f:
         for addr in range(DATA_MEMORY_START, DATA_MEMORY_END + 1, 4):
             value = data_memory.get(addr, 0)
-            f.write(f"0x{addr:08x}:0b{value:032b}\n")
+            if value >= 0:
+                value_bin = f"0b{value:032b}"
+            else:
+                value_bin = f"0b{(1 << 32) + value:032b}"
+            # Use uppercase X for hexadecimal format
+            f.write(f"0x{addr:08X}:{value_bin}\n")
 
 def load_program_memory(file_path):
     global program_memory, pc
@@ -56,135 +81,138 @@ def load_program_memory(file_path):
         print(f"Program loaded: {len(program_memory)} instructions")
     except Exception as e:
         print(f"Error loading program: {e}")
-        
 def sign_extend(value, bits):
     sign_bit = 1 << (bits - 1)
     return (value & (sign_bit - 1)) - (value & sign_bit)
-
+# Update execution functions to use the new print_register_state
 def execute_r_type(funct3, funct7, rs1, rs2, rd):
-    global regts,pc  # Access the register list
-    val1 = regts[int(rs1[1:])]  # Extract integer index
-    val2 = regts[int(rs2[1:])]
-
-    if funct3 == "000" and funct7 == "0000000":  # ADD 
-        regts[int(rd[1:])] = val1 + val2
-    elif funct3 == "000" and funct7 == "0100000":  # SUB okie2
-        regts[int(rd[1:])] = val1 - val2
-    elif funct3 == "010":  # SLT (Set Less Than)
-        # If val1 is less than val2 when treated as signed numbers, set rd to 1, else 0
-        regts[int(rd[1:])] = 1 if val1 < val2 else 0
-    elif funct3 == "101" and funct7 == "0000000":  # SRL Shift Right Logical
-        regts[int(rd[1:])] = val1 >> (val2 & 0x1F)
-    elif funct3 == "110" and funct7 == "0000000":  # OR                         
-        regts[int(rd[1:])] = val1 | val2
-    elif funct3 == "111" and funct7 == "0000000":  # AND                        
-        regts[int(rd[1:])] = val1 & val2        
-    pc+=4;                                      # cookie
-    print(f"Executed R-type: {rd} = {regts[int(rd[1:])]}")
-    print_register_state()
-
-def execute_i_type(funct3, imm, rs1, rd, opcode):
-    global regts, data_memory, pc     
+    global regts, pc
     val1 = regts[int(rs1[1:])]
-    rd_idx = int(rd[1:])
-    imm = sign_extend(imm, 12)  # Proper 12-bit sign extension
+    val2 = regts[int(rs2[1:])]
+    if funct3 == "000" and funct7 == "0000000":  # ADD
+        regts[int(rd[1:])] = val1 + val2
+    elif funct3 == "000" and funct7 == "0100000":  # SUB
+        regts[int(rd[1:])] = val1 - val2
+    elif funct3 == "010":  # SLT
+        regts[int(rd[1:])] = 1 if val1 < val2 else 0
+    elif funct3 == "101" and funct7 == "0000000":  # SRL
+        regts[int(rd[1:])] = val1 >> (val2 & 0x1F)
+    elif funct3 == "110" and funct7 == "0000000":  # OR
+        regts[int(rd[1:])] = val1 | val2
+    elif funct3 == "111" and funct7 == "0000000":  # AND
+        regts[int(rd[1:])] = val1 & val2
+    print(f"Executed R-type: {rd} = {regts[int(rd[1:])]}")
+    pc += 4
+    print_register_state(pc, regts, output_file_path)
 
-    if funct3 == "010" and opcode == "0000011":  # LW
-        mem_addr = val1 + imm
-        if DATA_MEMORY_START <= mem_addr <= DATA_MEMORY_END and mem_addr % 4 == 0:  # Word-aligned
-            regts[rd_idx] = data_memory.get(mem_addr, 0)  # Default to 0 if uninitialized
-            print(f"Executed LW: {rd} = MEM[{hex(mem_addr)}] = {regts[rd_idx]}")
-        else:
-            print(f"Error: Invalid memory address {hex(mem_addr)} for LW (range: {hex(DATA_MEMORY_START)}-{hex(DATA_MEMORY_END)})")
-            return True  # Indicate error (optional)
-        pc += 4
-        print_register_state()
-        return False
-    elif funct3 == "000" and opcode == "0010011":  # ADDI
-        regts[rd_idx] = val1 + imm
-        print(f"Executed ADDI: {rd} = {val1} + {imm} = {regts[rd_idx]}")
-        pc += 4
-        print_register_state()
-        return False
-    elif funct3 == "000" and opcode == "1100111":  # JALR
-        regts[rd_idx] = pc + 4
-        pc = (val1 + imm) & ~1  # Ensure LSB is 0
-        print(f"Executed JALR: {rd} = {pc + 4}, PC = {pc}")
-        print_register_state()
-        return True  # Jump taken
-    
-    pc += 4 # For other I-type instructions (if any)
-    print_register_state()
-    return False
-    
-# S-type execution
+# Update execute_s_type to better handle stack operations
 def execute_s_type(funct3, imm, rs1, rs2):
     global regts, stack_memory, data_memory, pc
     val1 = regts[int(rs1[1:])]
     val2 = regts[int(rs2[1:])]
     imm = sign_extend(imm, 12)
-
+    
     if funct3 == "010":  # SW
         mem_addr = val1 + imm
+        
+        # Check for stack operations (typically using sp register r2)
+        if int(rs1[1:]) == 2:
+            print(f"Stack operation detected: SW using stack pointer")
+            
         if STACK_MEMORY_START <= mem_addr <= STACK_MEMORY_END and mem_addr % 4 == 0:
             stack_memory[mem_addr] = val2 & 0xFFFFFFFF
-            print(f"Executed SW (Stack): MEM[{hex(mem_addr)}] = {val2} (from {rs2})")
+            print(f"Executed SW (Stack): MEM[{hex(mem_addr)}] = {val2}")
         elif DATA_MEMORY_START <= mem_addr <= DATA_MEMORY_END and mem_addr % 4 == 0:
             data_memory[mem_addr] = val2 & 0xFFFFFFFF
-            print(f"Executed SW (Data): MEM[{hex(mem_addr)}] = {val2} (from {rs2})")
+            print(f"Executed SW (Data): MEM[{hex(mem_addr)}] = {val2}")
         else:
             print(f"Error: Invalid memory address {hex(mem_addr)} for SW")
-        pc += 4
-        print_register_state()
-        return False
+            
+    pc += 4
+    print_register_state(pc, regts, output_file_path)
+    return False
+
+# Update execute_i_type to handle stack operations better
+def execute_i_type(funct3, imm, rs1, rd, opcode):
+    global regts, data_memory, stack_memory, pc
+    val1 = regts[int(rs1[1:])]
+    rd_idx = int(rd[1:])
+    imm = sign_extend(imm, 12)
+    
+    # Check for stack operations
+    if int(rs1[1:]) == 2:
+        print(f"Stack operation detected: Using stack pointer as base address")
+    
+    if funct3 == "010" and opcode == "0000011":  # LW
+        mem_addr = val1 + imm
+        if STACK_MEMORY_START <= mem_addr <= STACK_MEMORY_END and mem_addr % 4 == 0:
+            regts[rd_idx] = stack_memory.get(mem_addr, 0)
+            print(f"Executed LW from Stack: {rd} = MEM[{hex(mem_addr)}] = {regts[rd_idx]}")
+        elif DATA_MEMORY_START <= mem_addr <= DATA_MEMORY_END and mem_addr % 4 == 0:
+            regts[rd_idx] = data_memory.get(mem_addr, 0)
+            print(f"Executed LW from Data: {rd} = MEM[{hex(mem_addr)}] = {regts[rd_idx]}")
+        else:
+            print(f"Error: Invalid memory address {hex(mem_addr)} for LW")
+            return True
+    elif funct3 == "000" and opcode == "0010011":  # ADDI
+        # Check if this is updating the stack pointer
+        if rd_idx == 2:
+            print(f"Stack pointer operation: ADDI sp, {val1}, {imm}")
+            
+        regts[rd_idx] = val1 + imm
+        print(f"Executed ADDI: {rd} = {val1} + {imm} = {regts[rd_idx]}")
+    elif funct3 == "000" and opcode == "1100111":  # JALR
+        regts[rd_idx] = pc + 4
+        pc = (val1 + imm) & ~1
+        print(f"Executed JALR: {rd} = {pc + 4}, PC = {pc}")
+        print_register_state(pc, regts, output_file_path)
+        return True
+    
+    pc += 4
+    print_register_state(pc, regts, output_file_path)
+    return False
 
 def execute_b_type(funct3, imm, rs1, rs2):
-    global regts, pc  # Access the registers and program counter
+    global regts, pc
     val1 = regts[int(rs1[1:])]
     val2 = regts[int(rs2[1:])]
+    imm = sign_extend(imm, 13)
     
-    imm = sign_extend(imm, 13)  # 13-bit immediate (shifted left by 1)
-    
-       # Check for Virtual Halt instruction (beq zero,zero,0)
+    # Virtual halt check - BEQ r0, r0, 0
     if funct3 == "000" and rs1 == "r0" and rs2 == "r0" and imm == 0:
-        print("Virtual Halt encountered - stopping execution")
-        print_register_state()
-        print_data_memory()
-        return True  # Special halt return code
-    
+        pc += 4  # Important: increment PC before halting
+        print(f"Virtual Halt encountered - stopping execution")
+        print_register_state(pc, regts, output_file_path)
+        print_data_memory(data_memory, output_file_path)
+        return True  # Return True to indicate halt
+        
     if funct3 == "000":  # BEQ
         if val1 == val2:
-            pc+=imm
+            pc += imm
             print(f"Executed BEQ: Branch taken to PC = {pc}")
-            print_register_state()
-            return True  # PC was modified
+            print_register_state(pc, regts, output_file_path)
+            return True
         print(f"Executed BEQ: Branch not taken")
-    
     elif funct3 == "001":  # BNE
         if val1 != val2:
-            pc+=imm
+            pc += imm
             print(f"Executed BNE: Branch taken to PC = {pc}")
-            print_register_state()
-            return True  # PC was modified
+            print_register_state(pc, regts, output_file_path)
+            return True
         print(f"Executed BNE: Branch not taken")
-    pc+=4
-    print_register_state()
-    return False  # PC was not modified
-
+    
+    pc += 4
+    print_register_state(pc, regts, output_file_path)
+    return False
 def execute_j_type(imm, rd):
-    global regts, pc  # Access the registers and program counter
-    
-    imm = sign_extend(imm, 21)  # 21-bit immediate (shifted left by 1)
+    global regts, pc
+    imm = sign_extend(imm, 21)
     rd_idx = int(rd[1:])
-
     regts[rd_idx] = pc + 4
-    # Jump to target address    
     pc += imm
-    
     print(f"Executed JAL: {rd} = {pc + 4}, PC = {pc}")
-    print_register_state()
-    return True  # PC was modifiedfied
-
+    print_register_state(pc, regts, output_file_path)
+    return True
 # Memory initialization
 PROGRAM_MEMORY_SIZE = 256  # 64 locations * 4 bytes = 256 bytes
 STACK_MEMORY_SIZE = 128    # 32 locations * 4 bytes = 128 bytes
@@ -201,6 +229,7 @@ DATA_MEMORY_END = DATA_MEMORY_START + DATA_MEMORY_SIZE - 1          # 0x0001007F
 
 def simulate(input_file_path, output_file_path):
     global program_memory, pc, regts, data_memory, stack_memory
+    
     # Memory dictionaries (address -> 32-bit value)
     program_memory = {}  # For instructions
     stack_memory = {}    # For stack operations
@@ -208,13 +237,21 @@ def simulate(input_file_path, output_file_path):
 
     # Initialize 32 registers (all set to 0)
     regts = [0] * 32  
-    pc = 0  # Program Counter (PC)c
-   # Clear output file
+    
+    # Initialize stack pointer (r2) to the top of stack memory
+    regts[2] = STACK_MEMORY_START + STACK_MEMORY_SIZE - 4  # Point to the last valid word in stack
+    
+    pc = PROGRAM_MEMORY_START  # Start at 0x00000000
+    
+    # Clear output file
     with open(output_file_path, 'w') as f:
         f.write("")  # Clear the file content
     
     # Load program
     load_program_memory(input_file_path)
+    
+    # Print initial register state including initialized stack pointer
+    print_register_state(pc, regts, output_file_path)
     
     # Execute instructions
     halt_encountered = False
@@ -231,91 +268,91 @@ def simulate(input_file_path, output_file_path):
         instruction_bin = f"{instruction:032b}"
         opcode = instruction_bin[25:]
         
-        # Check for Virtual Halt (beq zero,zero,0)
-        if instruction_bin == "00000000000000000000000001100011":
-            print("Virtual Halt encountered - stopping execution")
-            print_register_state()
-            print_data_memory()
-            halt_encountered = True
-            break
-        
         print(f"Executing instruction at {hex(pc)}: {instruction_bin}")
         
-        if opcode == "0110011":  # R 
+        # Special handling for r0 - always keep it at 0
+        regts[0] = 0
+        
+        if opcode == "0110011":  # R-type
             funct7 = instruction_bin[:7]
             rs2 = "r" + str(int(instruction_bin[7:12], 2))
             rs1 = "r" + str(int(instruction_bin[12:17], 2))
             funct3 = instruction_bin[17:20]
             rd = "r" + str(int(instruction_bin[20:25], 2)) 
             execute_r_type(funct3, funct7, rs1, rs2, rd)
-
-        elif opcode == "0000011" or opcode == "0010011" or opcode == "1100111": # I
-            imm = int(instruction_bin[:12], 2) 
-            rs1 = "r" + str(int(instruction_bin[12:17], 2))  
-            funct3 = instruction_bin[17:20] 
-            rd = "r" + str(int(instruction_bin[20:25], 2))  
-            execute_i_type(funct3, imm, rs1, rd, opcode)
-
-        elif opcode == "0100011": # Store
+        
+        elif opcode in ["0000011", "0010011", "1100111"]:  # I-type
+            imm_str = instruction_bin[:12]
+            imm = int(imm_str, 2)
+            if imm_str[0] == '1':  # Check if sign bit is set
+                imm = sign_extend(imm, 12)
+            rs1 = "r" + str(int(instruction_bin[12:17], 2))
+            funct3 = instruction_bin[17:20]
+            rd = "r" + str(int(instruction_bin[20:25], 2))
+            if execute_i_type(funct3, imm, rs1, rd, opcode):
+                continue  # JALR changed PC, skip increment
+                
+        elif opcode == "0100011":  # S-type
             upper_imm = instruction_bin[:7]
             rs2 = "r" + str(int(instruction_bin[7:12], 2))
             rs1 = "r" + str(int(instruction_bin[12:17], 2))
             funct3 = instruction_bin[17:20]
             lower_imm = instruction_bin[20:25]
-            # Merge the immediate parts
-            imm = int(upper_imm + lower_imm, 2)  # Full 12-bit immediate
-            execute_s_type(funct3, imm, rs1, rs2)
+            imm_str = upper_imm + lower_imm
+            imm = int(imm_str, 2)
+            if imm_str[0] == '1':  # Check if sign bit is set
+                imm = sign_extend(imm, 12)
+            if execute_s_type(funct3, imm, rs1, rs2):
+                continue  # If function handled PC update, skip increment
         
-                # In the main execution loop, instead of checking for a specific bit pattern:
-        elif opcode == "1100011":  # Branch type
-            imm_12 = instruction_bin[0]  # Most significant bit (MSB)
-            imm_10_5 = instruction_bin[1:7]  # Bits 1-6
+        elif opcode == "1100011":  # B-type
+            imm_12 = instruction_bin[0]
+            imm_10_5 = instruction_bin[1:7]
             rs2 = "r" + str(int(instruction_bin[7:12], 2))
             rs1 = "r" + str(int(instruction_bin[12:17], 2))
             funct3 = instruction_bin[17:20]
-            imm_4_1 = instruction_bin[20:24]  # Bits 20-23
-            imm_11 = instruction_bin[24]  # Bit 24
+            imm_4_1 = instruction_bin[20:24]
+            imm_11 = instruction_bin[24]
+            imm_str = imm_12 + imm_11 + imm_10_5 + imm_4_1 + "0"
+            imm = int(imm_str, 2)
+            if imm_str[0] == '1':  # Check if sign bit is set
+                imm = sign_extend(imm, 13)  # B-type immediates are 13 bits
             
-            # Merge the immediate correctly
-            imm = int(imm_12 + imm_11 + imm_10_5 + imm_4_1 + "0", 2)  # Shift left by 1
-
-            # Apply sign extension if negative
-            if imm & (1 << 12):  # If 13th bit (MSB) is set
-                imm -= (1 << 13)  # Convert to signed value
-            
-            # Check for virtual halt (beq r0, r0, 0)
-            if funct3 == "000" and rs1 == "r0" and rs2 == "r0" and imm == 0:
-                print("Virtual Halt encountered - stopping execution")
-                print_register_state()
-                print_data_memory()
-                halt_encountered = True
-                break
-            
-            # Otherwise, execute the branch normally
-            result = execute_b_type(funct3, imm, rs1, rs2)
-
-        elif opcode == "1101111":  # J-Type (JAL)
-            imm_20 = instruction_bin[0]  # Most significant bit (MSB)
-            imm_10_1 = instruction_bin[1:11]  # Bits 1-10
-            imm_11 = instruction_bin[11]  # Bit 11
-            imm_19_12 = instruction_bin[12:20]  # Bits 12-19
-            rd = "r" + str(int(instruction_bin[20:25], 2))  # Destination register
-
-            # Merge the immediate in the correct order (J-Type format)
-            imm = int(imm_20 + imm_19_12 + imm_11 + imm_10_1 + "0", 2)  # Shift left by 1
-
-            # Apply sign extension if negative
-            if imm & (1 << 20):  # If 21st bit (MSB) is set
-                imm -= (1 << 21)  # Convert to signed value
-
+            branch_taken = execute_b_type(funct3, imm, rs1, rs2)
+            if branch_taken:
+                # The execute_b_type function already handles PC updates and virtual halt
+                if funct3 == "000" and rs1 == "r0" and rs2 == "r0" and imm == 0:
+                    halt_encountered = True
+                continue  # Skip PC increment
+                
+        elif opcode == "1101111":  # J-type (JAL)
+            imm_20 = instruction_bin[0]
+            imm_10_1 = instruction_bin[1:11]
+            imm_11 = instruction_bin[11]
+            imm_19_12 = instruction_bin[12:20]
+            rd = "r" + str(int(instruction_bin[20:25], 2))
+            imm_str = imm_20 + imm_19_12 + imm_11 + imm_10_1 + "0"
+            imm = int(imm_str, 2)
+            if imm_str[0] == '1':  # Check if sign bit is set
+                imm = sign_extend(imm, 21)  # J-type immediates are 21 bits
             execute_j_type(imm, rd)
-        
+            continue  # Skip PC increment as execute_j_type handles it
+            
         else:
             print(f"Error: Unknown opcode {opcode} at {hex(pc)}")
             break
+        
+        # Ensure r0 is always 0
+        regts[0] = 0
     
     if not halt_encountered:
         print("Warning: Program ended without encountering Virtual Halt")
+    
+    # Print final data memory state
+    print_data_memory(data_memory, output_file_path)
+    
+    # Also print stack memory state for debugging
+    print_stack_memory(stack_memory, output_file_path)
 
 # Memory initialization
 PROGRAM_MEMORY_SIZE = 256  # 64 locations * 4 bytes = 256 bytes
@@ -349,6 +386,5 @@ if __name__ == "__main__":
     if len(sys.argv) == 3:
         input_file_path = sys.argv[1]
         output_file_path = sys.argv[2]
-        
     print(f"Running simulator with input {input_file_path} and output {output_file_path}")
     simulate(input_file_path, output_file_path)
