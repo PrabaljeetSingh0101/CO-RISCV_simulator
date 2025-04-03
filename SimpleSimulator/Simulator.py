@@ -135,11 +135,13 @@ def execute_i_type(funct3, imm, rs1, rd, opcode):
     if funct3 == "010" and opcode == "0000011":  # LW
         mem_addr = val1 + imm
         if STACK_MEMORY_START <= mem_addr <= STACK_MEMORY_END and mem_addr % 4 == 0:
-            regts[rd_idx] = stack_memory.get(mem_addr, 0)
-            print(f"Executed LW from Stack: {rd} = MEM[{hex(mem_addr)}] = {regts[rd_idx]}")
+            if rd_idx != 0:  # Only update if not r0
+                regts[rd_idx] = stack_memory.get(mem_addr, 0)
+            print(f"Executed LW from Stack: {rd} = MEM[{hex(mem_addr)}] = {stack_memory.get(mem_addr, 0)}")
         elif DATA_MEMORY_START <= mem_addr <= DATA_MEMORY_END and mem_addr % 4 == 0:
-            regts[rd_idx] = data_memory.get(mem_addr, 0)
-            print(f"Executed LW from Data: {rd} = MEM[{hex(mem_addr)}] = {regts[rd_idx]}")
+            if rd_idx != 0:  # Only update if not r0
+                regts[rd_idx] = data_memory.get(mem_addr, 0)
+            print(f"Executed LW from Data: {rd} = MEM[{hex(mem_addr)}] = {data_memory.get(mem_addr, 0)}")
         else:
             print(f"Error: Invalid memory address {hex(mem_addr)} for LW")
             return True
@@ -147,20 +149,33 @@ def execute_i_type(funct3, imm, rs1, rd, opcode):
         # Check if this is updating the stack pointer
         if rd_idx == 2:
             print(f"Stack pointer operation: ADDI sp, {val1}, {imm}")
-            
-        regts[rd_idx] = val1 + imm
-        print(f"Executed ADDI: {rd} = {val1} + {imm} = {regts[rd_idx]}")
+        
+        if rd_idx != 0:  # Only update if not r0
+            regts[rd_idx] = val1 + imm
+        print(f"Executed ADDI: {rd} = {val1} + {imm} = {val1 + imm}")
     elif funct3 == "000" and opcode == "1100111":  # JALR
-        regts[rd_idx] = pc + 4
-        pc = (val1 + imm) & ~1
-        print(f"Executed JALR: {rd} = {pc + 4}, PC = {pc}")
+        target_pc = (val1 + imm) & ~1
+        
+        # For JALR, only update the destination register if it's not r0
+        if rd_idx != 0:
+            regts[rd_idx] = pc + 4
+            print(f"Executed JALR: {rd} = {pc + 4}, PC = {target_pc}")
+        else:
+            print(f"Executed JALR with r0: PC = {target_pc} (r0 remains 0)")
+        
+        # Always ensure r0 is 0 before printing register state
+        regts[0] = 0
+        
+        pc = target_pc
         print_register_state(pc, regts, output_file_path)
         return True
+    
+    # Ensure r0 is always 0 after executing any instruction
+    regts[0] = 0
     
     pc += 4
     print_register_state(pc, regts, output_file_path)
     return False
-
 def execute_b_type(funct3, imm, rs1, rs2):
     global regts, pc
     val1 = regts[int(rs1[1:])]
@@ -362,8 +377,8 @@ regts = [0] * 32
 pc = 0  # Program Counter (PC)
     
 # File paths (you should replace these with command line arguments)
-input_file_path = "/home/strangersagain/Downloads/Group_148/automatedTesting/tests/bin/simple/simple_1.txt"
-output_file_path = "/home/strangersagain/Downloads/Group_148/trace_output.txt"
+input_file_path = "/home/strangersagain/Downloads/Group_148_/automatedTesting/tests/bin/simple/simple_5.txt"
+output_file_path = "/home/strangersagain/Downloads/Group_148_/automatedTesting/tests/user_traces/simple/simple_5.txt"
 
 # Run the simulator
 if __name__ == "__main__":
