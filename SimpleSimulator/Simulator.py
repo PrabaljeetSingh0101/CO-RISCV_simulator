@@ -11,7 +11,7 @@ data_memory_size = 128
 data_memory_end = data_memory_start + data_memory_size - 1
 
 all_registers = [0] * 32
-program_counter = 0  
+program_counter = program_memory_start
 program_instructions = {}  
 stack_area = {}  
 data_area = {}  
@@ -23,11 +23,8 @@ def make_number_correct(number, bits):
 
 
 def write_registers_to_file(pc_value, all_regs, file_to_write):
-    if pc_value >= 0:
-        pc_binary = "0b" + format(pc_value, '032b')
-    else:
-        pc_binary = "0b" + format((1 << 32) + pc_value, '032b')
     
+    pc_binary = "0b" + format(pc_value, '032b')
     registers_in_binary = []
     for r in all_regs:
         if r >= 0:
@@ -58,8 +55,7 @@ def write_memory_to_file(memory_data, file_to_write):
     my_file.close()
 
 def load_program_from_file(file_name):
-    global program_instructions, program_counter, data_area
-    program_counter = program_memory_start
+    global program_instructions, data_area
     
     print("Loading program from file: " + file_name)
     
@@ -73,24 +69,9 @@ def load_program_from_file(file_name):
             line_number = line_number + 1
             print("Line " + str(line_number) + ": " + each_line)
             
-            if len(each_line) == 32 and all(bit == '0' or bit == '1' for bit in each_line):
-                program_instructions[current_address] = int(each_line, 2)
-                print("Loaded instruction at " + hex(current_address) + ": " + each_line)
-                current_address = current_address + 4
-            elif each_line.startswith("0b") and len(each_line) == 34:
-                program_instructions[current_address] = int(each_line[2:], 2)
-                print("Loaded instruction at " + hex(current_address) + ": " + each_line)
-                current_address = current_address + 4
-            elif each_line.startswith("0x"):
-                parts = each_line.split(":")
-                if len(parts) == 2:
-                    addr = int(parts[0], 16)
-                    if parts[1].startswith("0b"):
-                        value = int(parts[1][2:], 2)
-                    else:
-                        value = int(parts[1], 2)
-                    data_area[addr] = value
-                    print("Loaded data at " + hex(addr) + ": " + parts[1])
+            program_instructions[current_address] = int(each_line, 2)
+            print("Loaded instruction at " + hex(current_address) + ": " + each_line)
+            current_address = current_address + 4
             
             if current_address > program_memory_end:          
                 print("Error: Too many instructions for program memory!")
@@ -163,6 +144,7 @@ def do_i_type_instruction(func3, immediate, rs1, rd, op):
     rd_num = int(rd[1:])
     immediate = make_number_correct(immediate, 12)
     
+    
     if int(rs1[1:]) == 2:
         print("Stack operation: Using stack pointer as base")
     
@@ -212,7 +194,7 @@ def do_i_type_instruction(func3, immediate, rs1, rd, op):
 
 def do_b_type_instruction(func3, immediate, rs1, rs2):
     global all_registers, program_counter, output_file
-    
+
     value1 = all_registers[int(rs1[1:])] 
     value2 = all_registers[int(rs2[1:])]
     immediate = make_number_correct(immediate, 13)
@@ -258,21 +240,12 @@ def do_j_type_instruction(immediate, rd):
 
 def run_risc_v_simulation(input_file, output_file):
     global all_registers, program_counter, program_instructions, stack_area, data_area
-    
-    program_instructions = {}
-    stack_area = {}
-    data_area = {}
-    
-    all_registers = [0] * 32
-    
+
     # Set stack pointer (r2) to point to top of stack
     all_registers[2] = stack_memory_start + stack_memory_size - 4
     
-    # Set program counter to start
-    program_counter = program_memory_start
-    
     open(output_file, 'w').close()
-    
+
     load_program_from_file(input_file)
     
 
@@ -343,7 +316,7 @@ def run_risc_v_simulation(input_file, output_file):
             imm = int(imm_bits, 2)
             if imm_bits[0] == '1':
                 imm = make_number_correct(imm, 13)
-                
+            
             branch_result = do_b_type_instruction(func3, imm, rs1, rs2)
             if branch_result:
                 if func3 == "000" and rs1 == "r0" and rs2 == "r0" and imm == 0:
@@ -374,7 +347,7 @@ def run_risc_v_simulation(input_file, output_file):
         print("Warning: Program ended without Virtual Halt")
         write_memory_to_file(data_area, output_file)
 
-input_file = "/home/strangersagain/Downloads/Group_148/automatedTesting/tests/bin/simple/simple_10.txt"
-output_file = "/home/strangersagain/Downloads/Group_148/automatedTesting/tests/user_traces/simple/simple_10.txt"
+input_file = "/home/strangersagain/Downloads/Group_148/automatedTesting/tests/bin/simple/simple_1.txt"
+output_file = "/home/strangersagain/Downloads/Group_148/automatedTesting/tests/user_traces/simple/simple_1.txt"
 
 run_risc_v_simulation(input_file, output_file)
